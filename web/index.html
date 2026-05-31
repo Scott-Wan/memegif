@@ -26,13 +26,33 @@
     <section id="editor" class="editor hidden">
       <div class="video-wrap">
         <video id="video" preload="auto" muted playsinline></video>
+        <div id="crop-overlay" class="crop-overlay hidden">
+          <div id="crop-box" class="crop-box">
+            <span class="crop-handle nw" data-h="nw"></span>
+            <span class="crop-handle ne" data-h="ne"></span>
+            <span class="crop-handle sw" data-h="sw"></span>
+            <span class="crop-handle se" data-h="se"></span>
+          </div>
+        </div>
       </div>
 
       <div class="timeline">
-        <div class="range-labels">
-          <span id="start-label">0.0s</span>
-          <span id="dur-label">时长 0.0s</span>
-          <span id="end-label">0.0s</span>
+        <div class="time-row" id="time-row">
+          <label class="time-group">
+            <span class="time-tag">起点</span>
+            <span class="hours-only"><input class="tnum" id="start-h" type="number" min="0" value="0" />:</span>
+            <input class="tnum" id="start-m" type="number" min="0" value="00" />:
+            <input class="tnum" id="start-s" type="number" min="0" max="59" value="00" />:
+            <input class="tnum" id="start-f" type="number" min="0" value="00" />
+          </label>
+          <span id="dur-label" class="dur-mid">时长 0.0s</span>
+          <label class="time-group">
+            <span class="time-tag">终点</span>
+            <span class="hours-only"><input class="tnum" id="end-h" type="number" min="0" value="0" />:</span>
+            <input class="tnum" id="end-m" type="number" min="0" value="00" />:
+            <input class="tnum" id="end-s" type="number" min="0" max="59" value="00" />:
+            <input class="tnum" id="end-f" type="number" min="0" value="00" />
+          </label>
         </div>
         <div class="dual-slider" id="dual-slider">
           <div class="track"></div>
@@ -40,6 +60,13 @@
           <input type="range" id="start-range" min="0" max="100" step="0.1" value="0" />
           <input type="range" id="end-range" min="0" max="100" step="0.1" value="100" />
         </div>
+      </div>
+
+      <div class="crop-bar">
+        <button id="crop-btn" class="btn-secondary">✂ 裁切</button>
+        <label id="square-wrap" class="square-wrap hidden">
+          <input type="checkbox" id="square-toggle" /> 锁定正方形
+        </label>
       </div>
 
       <div class="presets">
