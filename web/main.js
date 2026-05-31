@@ -29,6 +29,14 @@ async function onVideoLoaded(info) {
 
   const srcRes = await window.pywebview.api.video_src(info.path);
   video.src = srcRes.url;
+  video.load();
+  // 加载到首帧后跳到开头一点点，让预览区显示画面而非黑屏
+  video.addEventListener("loadeddata", () => {
+    try { video.currentTime = 0.04; } catch (e) {}
+  }, { once: true });
+  video.addEventListener("error", () => {
+    setStatus("视频预览加载失败，但仍可直接选段后转换", "err");
+  }, { once: true });
 
   startRange.value = 0;
   endRange.value = 100;
@@ -102,14 +110,10 @@ whenReady(() => {
   ["dragleave", "drop"].forEach((ev) =>
     dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); })
   );
-  dropzone.addEventListener("drop", async (e) => {
-    const f = e.dataTransfer.files[0];
-    if (f && f.path) {
-      setStatus("载入中…", "busy");
-      const info = await window.pywebview.api.load_video(f.path);
-      onVideoLoaded(info);
-    } else {
-      setStatus("拖拽未能识别路径，请点「选择文件」", "err");
+  // 实际的文件落地由后端原生拖放处理（拿真实路径），这里只给即时反馈
+  dropzone.addEventListener("drop", (e) => {
+    if (e.dataTransfer.files && e.dataTransfer.files.length) {
+      setStatus("载入拖入的视频…", "busy");
     }
   });
 });

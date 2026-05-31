@@ -1,13 +1,34 @@
 """核心转换逻辑：定位 ffmpeg、探测视频、两步调色板转 GIF、体积回退。"""
 import json
+import os
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
+def _bundled_bin_dir() -> Path | None:
+    """返回随程序捆绑的 ffmpeg 所在目录（bin/），找不到返回 None。
+
+    - 打包成 exe 后（PyInstaller）：资源在 sys._MEIPASS / exe 同目录的 bin。
+    - 源码运行：项目根目录下的 bin。
+    """
+    if getattr(sys, "frozen", False):
+        base = Path(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable)))
+    else:
+        base = Path(__file__).resolve().parent
+    cand = base / "bin"
+    return cand if cand.is_dir() else None
+
+
 def find_ffmpeg() -> str:
-    """定位 ffmpeg 可执行文件。优先 PATH，其次常见 WinGet 安装目录。"""
+    """定位 ffmpeg 可执行文件。优先捆绑版，其次 PATH，再次 WinGet 安装目录。"""
+    bundled = _bundled_bin_dir()
+    if bundled:
+        exe = bundled / "ffmpeg.exe"
+        if exe.exists():
+            return str(exe)
     exe = shutil.which("ffmpeg")
     if exe:
         return exe
@@ -111,7 +132,25 @@ def convert(video_path: str, start: float, end: float, preset, out_path: str) ->
     return last
 
 
+def unique_path(path: str) -> str:
+    """若 path 已存在，则在主名后追加 _1、_2… 直到不冲突，返回可用路径。"""
+    p = Path(path)
+    if not p.exists():
+        return str(p)
+    stem, suffix, parent = p.stem, p.suffix, p.parent
+    n = 1
+    while True:
+        cand = parent / f"{stem}_{n}{suffix}"
+        if not cand.exists():
+            return str(cand)
+        n += 1
+
+
 def default_output_path(video_path: str, preset) -> str:
-    """源视频同目录，文件名加预设后缀，扩展名改为 .gif。"""
+    """源视频同目录，文件名加预设后缀，扩展名改为 .gif。
+
+    若同名 GIF 已存在（同一视频多次转换），自动追加序号，避免覆盖之前的成品。
+    """
     p = Path(video_path)
-    return str(p.with_name(p.stem + preset.suffix + ".gif"))
+    out = p.parent / f"{p.stem}{preset.suffix}.gif"
+    return unique_path(str(out))
