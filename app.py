@@ -133,10 +133,11 @@ class Api:
         return self.load_video(path)
 
     def load_video(self, path):
-        """探测视频时长，返回 {path, duration} 或 {error}。"""
+        """探测视频时长与帧率，返回 {path, duration, fps} 或 {error}。"""
         try:
             duration = converter.probe_duration(path)
-            return {"path": path, "duration": duration}
+            fps = converter.probe_fps(path)
+            return {"path": path, "duration": duration, "fps": fps}
         except Exception as e:
             return {"error": f"无法读取视频：{e}"}
 
@@ -145,12 +146,15 @@ class Api:
         vid = _register_video(path)
         return {"url": f"http://127.0.0.1:{self._video_port}/video?id={vid}"}
 
-    def convert(self, path, start, end, preset_key):
-        """执行转换，返回 {out_path, size_mb, max_edge, fps, within_limit} 或 {error}。"""
+    def convert(self, path, start, end, preset_key, crop=None):
+        """执行转换，返回 {out_path, size_mb, max_edge, fps, within_limit} 或 {error}。
+
+        crop 为 {'w','h','x','y'} 真实像素裁切区域，或 None 表示不裁切。
+        """
         try:
             preset = get_preset(preset_key)
             out_path = converter.default_output_path(path, preset)
-            r = converter.convert(path, float(start), float(end), preset, out_path)
+            r = converter.convert(path, float(start), float(end), preset, out_path, crop=crop)
             return {
                 "out_path": r.out_path,
                 "size_mb": round(r.size_bytes / 1024 / 1024, 2),
