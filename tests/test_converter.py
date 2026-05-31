@@ -46,3 +46,48 @@ def test_convert_once_produces_looping_gif(tmp_path):
     assert head in (b"GIF87a", b"GIF89a")
     w, h = converter.gif_dimensions(str(out))
     assert max(w, h) <= 240
+
+
+@requires_sample
+def test_convert_qq_under_limit(tmp_path):
+    out = tmp_path / "qq.gif"
+    result = converter.convert(
+        video_path=str(SAMPLE), start=0.0, end=3.0,
+        preset=get_preset("qq"), out_path=str(out),
+    )
+    assert out.exists()
+    assert result.size_bytes <= 5 * 1024 * 1024
+    w, h = converter.gif_dimensions(str(out))
+    assert max(w, h) <= 480
+
+
+@requires_sample
+def test_convert_wechat_under_strict_limit(tmp_path):
+    out = tmp_path / "wechat.gif"
+    result = converter.convert(
+        video_path=str(SAMPLE), start=0.0, end=3.0,
+        preset=get_preset("wechat"), out_path=str(out),
+    )
+    assert out.exists()
+    assert result.size_bytes <= 1 * 1024 * 1024
+    w, h = converter.gif_dimensions(str(out))
+    assert max(w, h) <= 300
+
+
+@requires_sample
+def test_convert_reports_final_params(tmp_path):
+    out = tmp_path / "r.gif"
+    result = converter.convert(
+        video_path=str(SAMPLE), start=0.0, end=3.0,
+        preset=get_preset("wechat"), out_path=str(out),
+    )
+    assert result.max_edge in get_preset("wechat").edge_ladder
+    assert result.fps in get_preset("wechat").fps_ladder
+    assert result.out_path == str(out)
+
+
+def test_default_output_path_adds_suffix():
+    p = converter.default_output_path("D:/clips/cat.mp4", get_preset("qq"))
+    assert p.replace("\\", "/") == "D:/clips/cat_qq.gif"
+    p2 = converter.default_output_path("D:/clips/cat.mp4", get_preset("wechat"))
+    assert p2.replace("\\", "/") == "D:/clips/cat_wechat.gif"

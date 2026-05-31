@@ -2,6 +2,7 @@
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -81,3 +82,30 @@ def convert_once(video_path: str, start: float, end: float,
     subprocess.run(use, capture_output=True, text=True, check=True)
     Path(palette).unlink(missing_ok=True)
     return Path(out_path).stat().st_size
+
+
+@dataclass
+class ConvertResult:
+    out_path: str
+    size_bytes: int
+    max_edge: int
+    fps: int
+    within_limit: bool   # 是否成功压到上限内
+
+
+def convert(video_path: str, start: float, end: float, preset, out_path: str) -> "ConvertResult":
+    """按预设转换并自动回退到体积达标。
+
+    回退策略：帧率为外层、分辨率为内层。对每个 fps，先逐级降分辨率；
+    某帧率下所有分辨率都超限，再降到下一档帧率。
+    每个 (edge, fps) 组合转一次、测体积，第一个达标的即返回。
+    全部尝试仍超限则返回最后一次（最小）结果并标记 within_limit=False。
+    """
+    last = None
+    for fps in preset.fps_ladder:
+        for edge in preset.edge_ladder:
+            size = convert_once(video_path, start, end, edge, fps, out_path)
+            last = ConvertResult(out_path, size, edge, fps, size <= preset.max_bytes)
+            if last.within_limit:
+                return last
+    return last
