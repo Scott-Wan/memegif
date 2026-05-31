@@ -109,3 +109,9 @@ def convert(video_path: str, start: float, end: float, preset, out_path: str) ->
             if last.within_limit:
                 return last
     return last
+
+
+def default_output_path(video_path: str, preset) -> str:
+    """源视频同目录，文件名加预设后缀，扩展名改为 .gif。"""
+    p = Path(video_path)
+    return str(p.with_name(p.stem + preset.suffix + ".gif"))
