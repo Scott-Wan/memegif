@@ -9,8 +9,9 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('web', 'web'),    # 前端 HTML/CSS/JS
-        ('bin', 'bin'),    # 捆绑的 ffmpeg.exe / ffprobe.exe
+        ('web', 'web'),                  # 前端 HTML/CSS/JS
+        ('bin', 'bin'),                  # 捆绑的 ffmpeg.exe / ffprobe.exe
+        ('assets/icon', 'assets/icon'),  # 应用图标（运行期设置任务栏图标用）
     ],
     hiddenimports=[],
     hookspath=[],
@@ -41,6 +42,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/icon/MemeGIF.ico',   # exe 图标（任务栏/窗口/文件图标）
 )
 
 coll = COLLECT(

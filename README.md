@@ -1,7 +1,13 @@
 # MemeGIF · 视频转表情包
 
+<p align="center">
+  <img src="assets/icon/MemeGIF-preview-512.png" width="220" alt="MemeGIF" />
+</p>
+
 把视频拖入窗口，可视化选取一段，转成循环播放、尽量清晰、体积达标的 GIF。
 主用途 QQ 表情（≤5MB），同时支持微信表情（≤1MB / ≤300px）。
+
+> 📦 直接下载使用：前往 [Releases](https://github.com/Scott-Wan/memegif/releases) 下载 `MemeGIF-vX.X.X-win64.zip`，解压后双击 `MemeGIF.exe` 即可（已内置 ffmpeg，无需安装任何依赖）。
 
 ## 运行
 

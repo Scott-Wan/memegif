@@ -208,13 +208,15 @@ def main():
             _push_js(window, "setStatus(" + json.dumps("拖入失败：" + str(ex)) + ",'err')")
 
     def _register_dnd():
-        """页面加载完成后，把拖放区注册为原生放置目标。
+        """页面加载完成后，把整个窗口注册为原生放置目标。
 
+        绑到 body 而非 #dropzone：导入页和编辑页都能拖入，转换后可直接拖下一个，
+        且能拦截 WebView2 把视频文件当链接打开的默认行为（否则会变成打开网页）。
         on() 只收 (event, callback)，要阻止默认行为必须传 DOMEventHandler 包装。
         必须监听 dragover/dragenter 并 preventDefault，浏览器才会把 drop 派发过来。
         """
         try:
-            el = window.dom.get_element("#dropzone")
+            el = window.dom.get_element("body")
             if not el:
                 _push_js(window, "setStatus('拖放区未就绪，请用「选择文件」','err')")
                 return

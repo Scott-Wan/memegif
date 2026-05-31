@@ -47,6 +47,18 @@ async function onVideoLoaded(info) {
   setStatus("拖动两端滑块选取片段，然后选择目标平台", null);
 }
 
+// 回到导入界面，以便选/拖下一个视频（转换后复用，无需重开程序）
+function resetToDropzone() {
+  try { video.pause(); } catch (e) {}
+  video.removeAttribute("src");
+  video.load();
+  state.path = null;
+  state.duration = 0;
+  editor.classList.add("hidden");
+  dropzone.classList.remove("hidden");
+  setStatus("拖入视频开始", null);
+}
+
 const pctToSec = (pct) => (pct / 100) * state.duration;
 
 function updateRangeUI() {
@@ -100,18 +112,27 @@ whenReady(() => {
     onVideoLoaded(info);
   });
 
+  $("reset-btn").addEventListener("click", resetToDropzone);
+
   document.querySelectorAll("[data-preset]").forEach((btn) => {
     btn.addEventListener("click", () => doConvert(btn.dataset.preset));
   });
 
+  // 拖放视觉反馈绑在整个窗口：无论在导入页还是编辑页，拖入都能识别。
+  // 真正的文件落地由后端原生拖放（body 上）处理，这里只做高亮 + 即时提示。
   ["dragenter", "dragover"].forEach((ev) =>
-    dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add("dragover"); })
+    document.body.addEventListener(ev, (e) => {
+      e.preventDefault();
+      if (!dropzone.classList.contains("hidden")) dropzone.classList.add("dragover");
+    })
   );
   ["dragleave", "drop"].forEach((ev) =>
-    dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); })
+    document.body.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+    })
   );
-  // 实际的文件落地由后端原生拖放处理（拿真实路径），这里只给即时反馈
-  dropzone.addEventListener("drop", (e) => {
+  document.body.addEventListener("drop", (e) => {
     if (e.dataTransfer.files && e.dataTransfer.files.length) {
       setStatus("载入拖入的视频…", "busy");
     }
