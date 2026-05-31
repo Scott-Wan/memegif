@@ -24,6 +24,25 @@ venv\Scripts\python.exe -m pytest -v
 
 （需要 `assets/sample.mp4` 测试素材，缺失时相关用例会自动跳过。）
 
+## 打包成 exe（开箱即用）
+
+打包时把 ffmpeg/ffprobe 一起打进程序，生成的 `GifMaker.exe` 拷到任何 Windows 电脑双击即用，无需另装 ffmpeg。
+
+```powershell
+# 1. 安装打包工具
+venv\Scripts\python.exe -m pip install pyinstaller
+
+# 2. 准备捆绑的 ffmpeg（bin\ 不进版本库，需手动放入）
+mkdir bin
+copy <ffmpeg安装目录>\ffmpeg.exe  bin\
+copy <ffmpeg安装目录>\ffprobe.exe bin\
+
+# 3. 打包
+venv\Scripts\python.exe -m PyInstaller gifmaker.spec --noconfirm --clean
+```
+
+产物在 `dist\GifMaker\`，整个文件夹即为可分发程序，运行其中的 `GifMaker.exe` 启动（约 460MB，含 ffmpeg）。
+
 ## 技术
 
 Python + pywebview 窗口，HTML/CSS/JS 前端，底层调 ffmpeg 两步调色板转换，
