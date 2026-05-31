@@ -54,7 +54,7 @@ def probe_duration(video_path: str) -> float:
         "-show_entries", "format=duration",
         "-of", "json", video_path,
     ]
-    out = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     data = json.loads(out.stdout)
     return float(data["format"]["duration"])
 
@@ -86,7 +86,7 @@ def probe_fps(video_path: str) -> float:
         "-show_entries", "stream=r_frame_rate,avg_frame_rate",
         "-of", "json", video_path,
     ]
-    out = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     streams = json.loads(out.stdout).get("streams") or [{}]
     s = streams[0]
     return _parse_fps(s.get("r_frame_rate", ""), s.get("avg_frame_rate", ""))
@@ -100,7 +100,7 @@ def gif_dimensions(gif_path: str) -> tuple:
         "-show_entries", "stream=width,height",
         "-of", "json", gif_path,
     ]
-    out = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     s = json.loads(out.stdout)["streams"][0]
     return int(s["width"]), int(s["height"])
 
@@ -144,7 +144,7 @@ def convert_once(video_path: str, start: float, end: float,
         "-vf", f"{vf},palettegen=stats_mode=diff",
         palette,
     ]
-    subprocess.run(gen, capture_output=True, text=True, check=True)
+    subprocess.run(gen, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     use = [
         ff, "-y", "-ss", f"{start}", "-t", f"{duration}", "-i", video_path,
         "-i", palette,
@@ -152,7 +152,7 @@ def convert_once(video_path: str, start: float, end: float,
         "-loop", "0",
         out_path,
     ]
-    subprocess.run(use, capture_output=True, text=True, check=True)
+    subprocess.run(use, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     Path(palette).unlink(missing_ok=True)
     return Path(out_path).stat().st_size
 
