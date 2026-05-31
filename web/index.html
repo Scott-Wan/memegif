@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GIF Maker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="logo" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="4" width="20" height="16" rx="4" fill="#D97757"/>
+        <path d="M9 9l6 3-6 3V9z" fill="#1C1B1A"/>
+      </svg>
+    </span>
+    <h1>GIF Maker</h1>
+    <span class="subtitle">视频转表情包</span>
+  </header>
+
+  <main>
+    <section id="dropzone" class="dropzone">
+      <svg class="drop-icon" width="40" height="40" viewBox="0 0 24 24" fill="none">
+        <path d="M12 16V4m0 0L8 8m4-4l4 4" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="#9B9B9B" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <p class="drop-text">把视频拖到这里</p>
+      <p class="drop-hint">或</p>
+      <button id="choose-btn" class="btn-secondary">选择文件</button>
+    </section>
+
+    <section id="editor" class="editor hidden">
+      <div class="video-wrap">
+        <video id="video" preload="metadata"></video>
+      </div>
+
+      <div class="timeline">
+        <div class="range-labels">
+          <span id="start-label">0.0s</span>
+          <span id="dur-label">时长 0.0s</span>
+          <span id="end-label">0.0s</span>
+        </div>
+        <div class="dual-slider" id="dual-slider">
+          <div class="track"></div>
+          <div class="range-fill" id="range-fill"></div>
+          <input type="range" id="start-range" min="0" max="100" step="0.1" value="0" />
+          <input type="range" id="end-range" min="0" max="100" step="0.1" value="100" />
+        </div>
+      </div>
+
+      <div class="presets">
+        <button class="btn-primary" data-preset="qq">转为 QQ 表情 · ≤5MB</button>
+        <button class="btn-primary alt" data-preset="wechat">转为 微信表情 · ≤1MB</button>
+      </div>
+    </section>
+
+    <footer id="status" class="status">拖入视频开始</footer>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
