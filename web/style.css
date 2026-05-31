@@ -192,7 +192,7 @@ main {
 #crop-btn.active { border-color: var(--accent); color: var(--accent); }
 
 /* 裁切叠层与框 */
-.crop-overlay { position: absolute; pointer-events: none; }
+.crop-overlay { position: absolute; pointer-events: none; overflow: hidden; }
 .crop-box {
   position: absolute;
   pointer-events: auto;
