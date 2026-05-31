@@ -1,0 +1,21 @@
+# Python 虚拟环境
+venv/
+.venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 生成的 GIF 输出
+*.gif
+
+# 测试用大体积视频素材（按需手动放入，不进版本库）
+assets/*.mp4
+assets/*.MP4
+
+# 编辑器/系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
