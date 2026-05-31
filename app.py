@@ -184,7 +184,7 @@ def main():
     api = Api(video_port)
     here = _resource_dir()
     window = webview.create_window(
-        title="GIF Maker · 视频转表情包",
+        title="MemeGIF · 视频转表情包",
         url=os.path.join(here, "web", "index.html"),
         js_api=api,
         width=720, height=640, min_size=(560, 520),

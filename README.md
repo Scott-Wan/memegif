@@ -1,4 +1,4 @@
-# GIF Maker · 视频转表情包
+# MemeGIF · 视频转表情包
 
 把视频拖入窗口，可视化选取一段，转成循环播放、尽量清晰、体积达标的 GIF。
 主用途 QQ 表情（≤5MB），同时支持微信表情（≤1MB / ≤300px）。
@@ -26,7 +26,7 @@ venv\Scripts\python.exe -m pytest -v
 
 ## 打包成 exe（开箱即用）
 
-打包时把 ffmpeg/ffprobe 一起打进程序，生成的 `GifMaker.exe` 拷到任何 Windows 电脑双击即用，无需另装 ffmpeg。
+打包时把 ffmpeg/ffprobe 一起打进程序，生成的 `MemeGIF.exe` 拷到任何 Windows 电脑双击即用，无需另装 ffmpeg。
 
 ```powershell
 # 1. 安装打包工具
@@ -38,10 +38,10 @@ copy <ffmpeg安装目录>\ffmpeg.exe  bin\
 copy <ffmpeg安装目录>\ffprobe.exe bin\
 
 # 3. 打包
-venv\Scripts\python.exe -m PyInstaller gifmaker.spec --noconfirm --clean
+venv\Scripts\python.exe -m PyInstaller memegif.spec --noconfirm --clean
 ```
 
-产物在 `dist\GifMaker\`，整个文件夹即为可分发程序，运行其中的 `GifMaker.exe` 启动（约 460MB，含 ffmpeg）。
+产物在 `dist\MemeGIF\`，整个文件夹即为可分发程序，运行其中的 `MemeGIF.exe` 启动（约 460MB，含 ffmpeg）。
 
 ## 技术
 
