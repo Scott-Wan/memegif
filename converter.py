@@ -105,20 +105,39 @@ def gif_dimensions(gif_path: str) -> tuple:
     return int(s["width"]), int(s["height"])
 
 
+def _build_vf(crop, fps, max_edge) -> str:
+    """构建 ffmpeg -vf 滤镜串。
+
+    crop 为 {'w','h','x','y'}（视频真实像素）或 None。
+    顺序：crop（先裁）-> fps -> scale（最长边缩到 max_edge，保持宽高比、取偶数）。
+    不裁切时与原行为完全一致。
+    """
+    scale = (
+        f"scale=if(gt(iw\\,ih)\\,{max_edge}\\,-2):"
+        f"if(gt(iw\\,ih)\\,-2\\,{max_edge}):flags=lanczos"
+    )
+    parts = []
+    if crop:
+        parts.append(
+            f"crop={int(crop['w'])}:{int(crop['h'])}:{int(crop['x'])}:{int(crop['y'])}"
+        )
+    parts.append(f"fps={fps}")
+    parts.append(scale)
+    return ",".join(parts)
+
+
 def convert_once(video_path: str, start: float, end: float,
-                 max_edge: int, fps: int, out_path: str) -> int:
+                 max_edge: int, fps: int, out_path: str, crop=None) -> int:
     """用两步调色板把 [start,end] 片段转成循环 GIF，返回输出字节数。
 
+    - crop：{'w','h','x','y'} 真实像素裁切区域，None 表示不裁。
     - 缩放：最长边缩到 max_edge，另一边按比例（保持宽高比，宽高取偶数）。
     - palettegen/paletteuse：生成专属 256 色调色板，提升清晰度。
     - -loop 0：无限循环。
     """
     ff = find_ffmpeg()
     duration = max(0.001, end - start)
-    vf = (
-        f"fps={fps},"
-        f"scale=if(gt(iw\\,ih)\\,{max_edge}\\,-2):if(gt(iw\\,ih)\\,-2\\,{max_edge}):flags=lanczos"
-    )
+    vf = _build_vf(crop, fps, max_edge)
     palette = str(Path(out_path).with_suffix(".palette.png"))
     gen = [
         ff, "-y", "-ss", f"{start}", "-t", f"{duration}", "-i", video_path,
@@ -147,8 +166,9 @@ class ConvertResult:
     within_limit: bool   # 是否成功压到上限内
 
 
-def convert(video_path: str, start: float, end: float, preset, out_path: str) -> "ConvertResult":
-    """按预设转换并自动回退到体积达标。
+def convert(video_path: str, start: float, end: float, preset, out_path: str,
+            crop=None) -> "ConvertResult":
+    """按预设转换并自动回退到体积达标。crop 透传给每次转换（裁切区域不随回退变化）。
 
     回退策略：帧率为外层、分辨率为内层。对每个 fps，先逐级降分辨率；
     某帧率下所有分辨率都超限，再降到下一档帧率。
@@ -158,7 +178,7 @@ def convert(video_path: str, start: float, end: float, preset, out_path: str) ->
     last = None
     for fps in preset.fps_ladder:
         for edge in preset.edge_ladder:
-            size = convert_once(video_path, start, end, edge, fps, out_path)
+            size = convert_once(video_path, start, end, edge, fps, out_path, crop=crop)
             last = ConvertResult(out_path, size, edge, fps, size <= preset.max_bytes)
             if last.within_limit:
                 return last

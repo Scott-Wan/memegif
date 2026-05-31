@@ -112,3 +112,29 @@ def test_probe_fps_positive():
     fps = converter.probe_fps(str(SAMPLE))
     assert isinstance(fps, float)
     assert fps > 0
+
+
+def test_build_vf_no_crop():
+    vf = converter._build_vf(None, 12, 300)
+    assert vf.startswith("fps=12,scale=")
+    assert "crop=" not in vf
+    assert "flags=lanczos" in vf
+
+
+def test_build_vf_with_crop_puts_crop_first():
+    vf = converter._build_vf({"w": 200, "h": 100, "x": 10, "y": 20}, 15, 480)
+    assert vf.startswith("crop=200:100:10:20,")
+    assert ",fps=15," in vf
+    assert vf.index("crop=") < vf.index("fps=") < vf.index("scale=")
+
+
+@requires_sample
+def test_convert_once_with_crop_changes_dimensions(tmp_path):
+    out = tmp_path / "cropped.gif"
+    converter.convert_once(
+        video_path=str(SAMPLE), start=0.0, end=1.0,
+        max_edge=240, fps=10, out_path=str(out),
+        crop={"w": 120, "h": 120, "x": 0, "y": 0},
+    )
+    w, h = converter.gif_dimensions(str(out))
+    assert w == h  # 1:1 裁切后等比缩放仍为正方形
