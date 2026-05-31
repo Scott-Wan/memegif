@@ -34,6 +34,8 @@ body {
 .topbar h1 { font-size: 16px; font-weight: 600; }
 .topbar .subtitle { color: var(--text-dim); font-size: 12px; margin-left: 4px; }
 .logo { display: inline-flex; }
+.logo-img { width: 24px; height: 24px; object-fit: contain; display: block; }
+.drop-icon-img { width: 56px; height: 56px; object-fit: contain; opacity: .95; }
 
 main {
   flex: 1;
