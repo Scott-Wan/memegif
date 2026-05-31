@@ -21,6 +21,10 @@ ffmpeg 两步调色板转 GIF，体积超限自动逐级回退（先降分辨率
 - 时间输入采用"智能"格式：默认 分:秒:帧，视频时长 ≥ 1 小时才显示小时位。
 - 数字输入与滑块、预览画面三者双向联动。
 - 不裁切 / 不使用数字输入时，原有行为完全不变。
+- **保持原有美术风格**：深色背景 + 陶土橙强调（Claude 风格），新增控件沿用现有
+  CSS 变量与按钮样式，不引入新配色或新视觉语言。
+- **用应用 PNG 图案替换内嵌 SVG**：顶栏 logo 与拖放区图标当前是内嵌 SVG，
+  改用应用本身的 PNG 图标（`assets/icon/` 内的图案）。
 
 **非目标**
 - 不做旋转、翻转、滤镜等其它画面编辑。
@@ -83,6 +87,25 @@ ffmpeg 两步调色板转 GIF，体积超限自动逐级回退（先降分辨率
 - `convert_once` / `convert` 新增可选参数 `crop`（dict 或 None），透传给 `_build_vf`。
 - 体积回退梯度照旧，作用在裁切后画面的最长边上。
 
+## 功能三：界面图标替换与风格约束
+
+### PNG 图标替换
+- 现状：`index.html` 顶栏 logo 与拖放区上传图标均为内嵌 SVG。
+- 改用应用自带 PNG。素材：`assets/icon/MemeGIF-icon-transparent.png`（透明背景，
+  适合叠在深色背景上）。
+- 做法：把该 PNG 拷一份到 `web/`（如 `web/logo.png`），`index.html` 用相对路径
+  `<img src="logo.png">` 引用——这样源码运行与打包（`datas` 已含 `('web','web')`）
+  都能正确加载，不依赖跨目录相对路径。
+- 顶栏 logo 用 PNG 替换内嵌 SVG（CSS 控制为约 22–24px）；拖放区图标同样替换为
+  PNG（尺寸约 40–56px，保持原布局位置）。
+
+### 风格约束（贯穿全部改动）
+- 严格沿用现有 CSS 变量（`--bg/--panel/--accent/--border` 等）与既有按钮类
+  （`.btn-primary/.btn-secondary`）。
+- 新增控件（数字输入框、裁切按钮、裁切框手柄/遮罩、正方形开关）的配色、圆角、
+  间距与现有组件一致，不引入新色板或新视觉语言。
+- 验收时对照改动前后，确认整体观感不破坏深色 + 陶土橙风格。
+
 ## 受影响文件
 
 - `converter.py`
@@ -92,9 +115,11 @@ ffmpeg 两步调色板转 GIF，体积超限自动逐级回退（先降分辨率
 - `app.py`
   - `load_video` 返回值增加 `fps`。
   - `convert` API 增加 `crop` 参数，透传给 `converter.convert`。
-- `web/index.html`：数字输入行、`裁切` 按钮、裁切框 DOM、`锁定正方形` 开关。
+- `web/index.html`：数字输入行、`裁切` 按钮、裁切框 DOM、`锁定正方形` 开关；
+  顶栏与拖放区 SVG 改为 `<img src="logo.png">`。
+- `web/logo.png`：从 `assets/icon/MemeGIF-icon-transparent.png` 拷入（新增文件）。
 - `web/main.js`：以秒为真相的状态重构、数字框双向联动、裁切框拖拽/缩放/正方形约束、坐标换算。
-- `web/style.css`：数字输入框、裁切框手柄、遮罩、按钮的深色橙风格样式。
+- `web/style.css`：数字输入框、裁切框手柄、遮罩、按钮、PNG logo 的深色橙风格样式。
 - 测试：
   - `_build_vf`：含 crop / 不含 crop 两种情况生成正确滤镜串。
   - `probe_fps`：解析 `30000/1001`、`25/1`、`0/0` 回退等分支（可对解析逻辑做纯单元测试）。
