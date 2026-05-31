@@ -9,10 +9,7 @@
 <body>
   <header class="topbar">
     <span class="logo" aria-hidden="true">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-        <rect x="2" y="4" width="20" height="16" rx="4" fill="#D97757"/>
-        <path d="M9 9l6 3-6 3V9z" fill="#1C1B1A"/>
-      </svg>
+      <img src="logo.png" alt="MemeGIF" class="logo-img" />
     </span>
     <h1>MemeGIF</h1>
     <span class="subtitle">视频转表情包</span>
@@ -20,10 +17,7 @@
 
   <main>
     <section id="dropzone" class="dropzone">
-      <svg class="drop-icon" width="40" height="40" viewBox="0 0 24 24" fill="none">
-        <path d="M12 16V4m0 0L8 8m4-4l4 4" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="#9B9B9B" stroke-width="2" stroke-linecap="round"/>
-      </svg>
+      <img src="logo.png" alt="" class="drop-icon-img" />
       <p class="drop-text">把视频拖到这里</p>
       <p class="drop-hint">或</p>
       <button id="choose-btn" class="btn-secondary">选择文件</button>
@@ -32,13 +26,33 @@
     <section id="editor" class="editor hidden">
       <div class="video-wrap">
         <video id="video" preload="auto" muted playsinline></video>
+        <div id="crop-overlay" class="crop-overlay hidden">
+          <div id="crop-box" class="crop-box">
+            <span class="crop-handle nw" data-h="nw"></span>
+            <span class="crop-handle ne" data-h="ne"></span>
+            <span class="crop-handle sw" data-h="sw"></span>
+            <span class="crop-handle se" data-h="se"></span>
+          </div>
+        </div>
       </div>
 
       <div class="timeline">
-        <div class="range-labels">
-          <span id="start-label">0.0s</span>
-          <span id="dur-label">时长 0.0s</span>
-          <span id="end-label">0.0s</span>
+        <div class="time-row" id="time-row">
+          <label class="time-group">
+            <span class="time-tag">起点</span>
+            <span class="hours-only"><input class="tnum" id="start-h" type="number" min="0" value="0" />:</span>
+            <input class="tnum" id="start-m" type="number" min="0" value="00" />:
+            <input class="tnum" id="start-s" type="number" min="0" max="59" value="00" />:
+            <input class="tnum" id="start-f" type="number" min="0" value="00" />
+          </label>
+          <span id="dur-label" class="dur-mid">时长 0.0s</span>
+          <label class="time-group">
+            <span class="time-tag">终点</span>
+            <span class="hours-only"><input class="tnum" id="end-h" type="number" min="0" value="0" />:</span>
+            <input class="tnum" id="end-m" type="number" min="0" value="00" />:
+            <input class="tnum" id="end-s" type="number" min="0" max="59" value="00" />:
+            <input class="tnum" id="end-f" type="number" min="0" value="00" />
+          </label>
         </div>
         <div class="dual-slider" id="dual-slider">
           <div class="track"></div>
@@ -46,6 +60,13 @@
           <input type="range" id="start-range" min="0" max="100" step="0.1" value="0" />
           <input type="range" id="end-range" min="0" max="100" step="0.1" value="100" />
         </div>
+      </div>
+
+      <div class="crop-bar">
+        <button id="crop-btn" class="btn-secondary">✂ 裁切</button>
+        <label id="square-wrap" class="square-wrap hidden">
+          <input type="checkbox" id="square-toggle" /> 锁定正方形
+        </label>
       </div>
 
       <div class="presets">

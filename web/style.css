@@ -34,6 +34,8 @@ body {
 .topbar h1 { font-size: 16px; font-weight: 600; }
 .topbar .subtitle { color: var(--text-dim); font-size: 12px; margin-left: 4px; }
 .logo { display: inline-flex; }
+.logo-img { width: 24px; height: 24px; object-fit: contain; display: block; }
+.drop-icon-img { width: 56px; height: 56px; object-fit: contain; opacity: .95; }
 
 main {
   flex: 1;
@@ -149,3 +151,65 @@ main {
 .status.busy { color: var(--accent); }
 .status.ok { color: var(--ok); border-color: var(--ok); }
 .status.err { color: var(--err); border-color: var(--err); }
+
+/* 视频区相对定位，供裁切叠层对齐 */
+.video-wrap { position: relative; }
+
+/* 时间数字输入行 */
+.time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.time-group { display: inline-flex; align-items: center; gap: 2px; }
+.time-tag { color: var(--text-dim); margin-right: 4px; }
+.dur-mid { color: var(--accent); }
+.tnum {
+  width: 30px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 2px;
+  -moz-appearance: textfield;
+}
+.tnum::-webkit-outer-spin-button,
+.tnum::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tnum:focus { outline: none; border-color: var(--accent); }
+/* 小时位默认隐藏，视频超 1 小时时由 .has-hours 显示 */
+.hours-only { display: none; }
+.has-hours .hours-only { display: inline-flex; align-items: center; gap: 2px; }
+
+/* 裁切工具行 */
+.crop-bar { display: flex; align-items: center; gap: 12px; }
+.square-wrap { font-size: 13px; color: var(--text-dim); cursor: pointer; user-select: none; }
+.square-wrap input { accent-color: var(--accent); }
+#crop-btn.active { border-color: var(--accent); color: var(--accent); }
+
+/* 裁切叠层与框 */
+.crop-overlay { position: absolute; pointer-events: none; overflow: hidden; }
+.crop-box {
+  position: absolute;
+  pointer-events: auto;
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);   /* 框外压暗遮罩 */
+  cursor: move;
+  box-sizing: border-box;
+}
+.crop-handle {
+  position: absolute;
+  width: 12px; height: 12px;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  border-radius: 50%;
+  pointer-events: auto;
+}
+.crop-handle.nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.crop-handle.ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.crop-handle.sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.crop-handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
