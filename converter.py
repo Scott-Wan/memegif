@@ -59,6 +59,39 @@ def probe_duration(video_path: str) -> float:
     return float(data["format"]["duration"])
 
 
+def _parse_fps(r_frame_rate: str, avg_frame_rate: str | None = None) -> float:
+    """把 ffprobe 的 'num/den' 帧率串解析为浮点 fps。
+
+    无效（'0/0'、空、除零、解析失败）时先试 avg_frame_rate，再不行回退 25.0。
+    """
+    def _one(s):
+        if not s or "/" not in s:
+            return None
+        num, den = s.split("/", 1)
+        try:
+            num, den = float(num), float(den)
+        except ValueError:
+            return None
+        if den == 0 or num == 0:
+            return None
+        return num / den
+    return _one(r_frame_rate) or _one(avg_frame_rate) or 25.0
+
+
+def probe_fps(video_path: str) -> float:
+    """探测视频真实帧率（每秒帧数）。读不到时回退 25.0。"""
+    cmd = [
+        _ffprobe(), "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=r_frame_rate,avg_frame_rate",
+        "-of", "json", video_path,
+    ]
+    out = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    streams = json.loads(out.stdout).get("streams") or [{}]
+    s = streams[0]
+    return _parse_fps(s.get("r_frame_rate", ""), s.get("avg_frame_rate", ""))
+
+
 def gif_dimensions(gif_path: str) -> tuple:
     """返回 GIF 的 (宽, 高) 像素。"""
     cmd = [

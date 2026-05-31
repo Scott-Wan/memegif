@@ -91,3 +91,24 @@ def test_default_output_path_adds_suffix():
     assert p.replace("\\", "/") == "D:/clips/cat_qq.gif"
     p2 = converter.default_output_path("D:/clips/cat.mp4", get_preset("wechat"))
     assert p2.replace("\\", "/") == "D:/clips/cat_wechat.gif"
+
+
+def test_parse_fps_normal():
+    assert converter._parse_fps("30000/1001") == pytest.approx(29.97, abs=0.01)
+    assert converter._parse_fps("25/1") == 25.0
+
+
+def test_parse_fps_zero_falls_back_to_avg():
+    assert converter._parse_fps("0/0", "24/1") == 24.0
+
+
+def test_parse_fps_all_invalid_defaults_25():
+    assert converter._parse_fps("0/0", "0/0") == 25.0
+    assert converter._parse_fps("", None) == 25.0
+
+
+@requires_sample
+def test_probe_fps_positive():
+    fps = converter.probe_fps(str(SAMPLE))
+    assert isinstance(fps, float)
+    assert fps > 0
