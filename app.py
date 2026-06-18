@@ -3,6 +3,7 @@
 视频预览通过一个本地 HTTP 服务提供（支持 Range 请求），
 这样 <video> 既能正确加载含中文/特殊字符路径的视频，又能拖动 seek 跳帧。
 """
+import base64
 import json
 import os
 import threading
@@ -20,10 +21,11 @@ _registry = {}
 _registry_lock = threading.Lock()
 _next_id = [0]
 
-# 常见视频扩展名 -> MIME 类型
+# 常见视频/动图扩展名 -> MIME 类型
 _MIME = {
     ".mp4": "video/mp4", ".mov": "video/quicktime", ".mkv": "video/x-matroska",
     ".webm": "video/webm", ".avi": "video/x-msvideo", ".flv": "video/x-flv",
+    ".gif": "image/gif",
 }
 
 
@@ -125,7 +127,7 @@ class Api:
         """弹原生文件对话框选视频，返回 {path, duration} 或 {error}。"""
         result = self._window.create_file_dialog(
             webview.OPEN_DIALOG,
-            file_types=("视频文件 (*.mp4;*.mov;*.mkv;*.avi;*.webm;*.flv)", "所有文件 (*.*)"),
+            file_types=("视频和动图 (*.mp4;*.mov;*.mkv;*.avi;*.webm;*.flv;*.gif)", "所有文件 (*.*)"),
         )
         if not result:
             return {"cancelled": True}
@@ -133,18 +135,37 @@ class Api:
         return self.load_video(path)
 
     def load_video(self, path):
-        """探测视频时长与帧率，返回 {path, duration, fps} 或 {error}。"""
+        """探测时长与帧率，返回 {path, duration, fps, kind} 或 {error}。
+
+        kind 为 'gif'（动图，前端用 <img> 预览）或 'video'（用 <video> 预览）。
+        """
         try:
             duration = converter.probe_duration(path)
             fps = converter.probe_fps(path)
-            return {"path": path, "duration": duration, "fps": fps}
+            kind = "gif" if os.path.splitext(path)[1].lower() == ".gif" else "video"
+            return {"path": path, "duration": duration, "fps": fps, "kind": kind}
         except Exception as e:
-            return {"error": f"无法读取视频：{e}"}
+            return {"error": f"无法读取文件：{e}"}
 
     def video_src(self, path):
         """登记视频并返回 <video> 可加载的本地 HTTP URL（支持 seek）。"""
         vid = _register_video(path)
         return {"url": f"http://127.0.0.1:{self._video_port}/video?id={vid}"}
+
+    def gif_data_url(self, path):
+        """把 GIF 读成 base64 data: URL 内联给 <img>，返回 {url} 或 {error}。
+
+        GIF 是静态资源、无需 seek，直接内联可彻底绕开 WebView2 下
+        file:// 页面请求本地 HTTP 服务的跨源 / 206 Range 兼容问题
+        （图片解码器拿到 206 Partial 常判定为加载失败，导致预览框空白）。
+        """
+        try:
+            with open(path, "rb") as f:
+                raw = f.read()
+            b64 = base64.b64encode(raw).decode("ascii")
+            return {"url": f"data:image/gif;base64,{b64}"}
+        except Exception as e:
+            return {"error": f"无法读取 GIF：{e}"}
 
     def convert(self, path, start, end, preset_key, crop=None):
         """执行转换，返回 {out_path, size_mb, max_edge, fps, within_limit} 或 {error}。

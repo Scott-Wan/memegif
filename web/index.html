@@ -18,7 +18,7 @@
   <main>
     <section id="dropzone" class="dropzone">
       <img src="logo.png" alt="" class="drop-icon-img" />
-      <p class="drop-text">把视频拖到这里</p>
+      <p class="drop-text">把视频 / GIF 拖到这里</p>
       <p class="drop-hint">或</p>
       <button id="choose-btn" class="btn-secondary">选择文件</button>
     </section>
@@ -26,6 +26,7 @@
     <section id="editor" class="editor hidden">
       <div class="video-wrap">
         <video id="video" preload="auto" muted playsinline></video>
+        <img id="gif-img" class="gif-img hidden" alt="" />
         <div id="crop-overlay" class="crop-overlay hidden">
           <div id="crop-box" class="crop-box">
             <span class="crop-handle nw" data-h="nw"></span>

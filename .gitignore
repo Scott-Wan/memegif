@@ -20,6 +20,9 @@ dist/
 bin/
 *.spec.bak
 
+# superpowers skills 本地备份（按需手动启用，不进版本库）
+.superpowers-skills/
+
 # 编辑器/系统
 .vscode/
 .idea/

@@ -47,16 +47,61 @@ def _ffprobe() -> str:
     return str(probe) if probe.exists() else "ffprobe"
 
 
+def _to_float(v) -> float | None:
+    """把 ffprobe 字段（可能是 'N/A'、None、数字串）解析为正浮点数，否则 None。"""
+    try:
+        f = float(v)
+        return f if f > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def probe_duration(video_path: str) -> float:
-    """返回视频时长（秒）。"""
+    """返回视频时长（秒）。
+
+    GIF 等格式常缺 format.duration，故依次回退：
+    容器时长 -> 流时长 -> 精确数帧 / 平均帧率。
+    """
     cmd = [
         _ffprobe(), "-v", "error",
-        "-show_entries", "format=duration",
+        "-select_streams", "v:0",
+        "-show_entries", "format=duration:stream=duration,avg_frame_rate,r_frame_rate",
         "-of", "json", video_path,
     ]
     out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
     data = json.loads(out.stdout)
-    return float(data["format"]["duration"])
+    fmt = data.get("format") or {}
+    d = _to_float(fmt.get("duration"))
+    if d:
+        return d
+    s = (data.get("streams") or [{}])[0]
+    d = _to_float(s.get("duration"))
+    if d:
+        return d
+    # GIF 兜底：解码全部帧得到准确帧数，再除以平均帧率
+    nb = _count_frames(video_path)
+    fps = _parse_fps(s.get("avg_frame_rate", ""), s.get("r_frame_rate", ""))
+    if nb and fps:
+        return nb / fps
+    raise ValueError("无法确定时长")
+
+
+def _count_frames(video_path: str) -> int | None:
+    """精确数出视频帧数（解码全部帧，GIF 很小、开销可忽略），失败返回 None。"""
+    cmd = [
+        _ffprobe(), "-v", "error",
+        "-select_streams", "v:0",
+        "-count_frames",
+        "-show_entries", "stream=nb_read_frames",
+        "-of", "json", video_path,
+    ]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
+        nb = (json.loads(out.stdout).get("streams") or [{}])[0].get("nb_read_frames")
+        n = int(nb)
+        return n if n > 0 else None
+    except (subprocess.CalledProcessError, ValueError, TypeError, KeyError):
+        return None
 
 
 def _parse_fps(r_frame_rate: str, avg_frame_rate: str | None = None) -> float:

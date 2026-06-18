@@ -114,6 +114,16 @@ def test_probe_fps_positive():
     assert fps > 0
 
 
+def test_to_float_parses_valid_and_rejects_na():
+    assert converter._to_float("3.5") == 3.5
+    assert converter._to_float("2") == 2.0
+    # 'N/A'、None、0、负数均视为无效（GIF 缺时长时常见）
+    assert converter._to_float("N/A") is None
+    assert converter._to_float(None) is None
+    assert converter._to_float("0") is None
+    assert converter._to_float("-1") is None
+
+
 def test_build_vf_no_crop():
     vf = converter._build_vf(None, 12, 300)
     assert vf.startswith("fps=12,scale=")
