@@ -1,5 +1,8 @@
+import json
 import os
+import subprocess
 from pathlib import Path
+from unittest.mock import ANY
 
 import pytest
 
@@ -12,10 +15,37 @@ requires_sample = pytest.mark.skipif(
 )
 
 
+@pytest.fixture
+def animated_gif(tmp_path):
+    gif_path = tmp_path / "animated.gif"
+    ffmpeg = converter.find_ffmpeg()
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=160x90:rate=12",
+        "-t",
+        "1",
+        str(gif_path),
+    ]
+    subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    assert gif_path.exists()
+    assert gif_path.stat().st_size > 0
+    return gif_path
+
+
 def test_find_ffmpeg_returns_executable():
     exe = converter.find_ffmpeg()
     assert exe  # 非空
-    import subprocess
     out = subprocess.run([exe, "-version"], capture_output=True, text=True)
     assert out.returncode == 0
     assert "ffmpeg version" in out.stdout
@@ -26,6 +56,36 @@ def test_probe_duration_positive():
     dur = converter.probe_duration(str(SAMPLE))
     assert isinstance(dur, float)
     assert dur > 0
+
+
+def test_probe_dimensions_returns_first_stream_size(monkeypatch):
+    class DummyCompletedProcess:
+        stdout = json.dumps({
+            "streams": [
+                {"width": 320, "height": 240},
+                {"width": 640, "height": 480},
+            ]
+        })
+
+    def fake_run(cmd, capture_output, text, encoding, errors, check):
+        return DummyCompletedProcess()
+
+    monkeypatch.setattr(converter.subprocess, "run", fake_run)
+
+    assert converter.probe_dimensions("demo.mp4") == (320, 240)
+
+
+def test_probe_dimensions_raises_when_no_valid_stream(monkeypatch):
+    class DummyCompletedProcess:
+        stdout = json.dumps({"streams": [{"width": 0, "height": 720}, {}]})
+
+    def fake_run(cmd, capture_output, text, encoding, errors, check):
+        return DummyCompletedProcess()
+
+    monkeypatch.setattr(converter.subprocess, "run", fake_run)
+
+    with pytest.raises(ValueError, match="无法确定画面尺寸"):
+        converter.probe_dimensions("demo.mp4")
 
 
 @requires_sample
@@ -148,3 +208,130 @@ def test_convert_once_with_crop_changes_dimensions(tmp_path):
     )
     w, h = converter.gif_dimensions(str(out))
     assert w == h  # 1:1 裁切后等比缩放仍为正方形
+
+
+def test_create_gif_preview_returns_non_empty_mp4(animated_gif, tmp_path):
+    out = tmp_path / "preview.mp4"
+    result = converter.create_gif_preview(str(animated_gif), str(out))
+
+    assert result == str(out)
+    assert out.exists()
+    assert out.stat().st_size > 0
+
+    width, height = converter.probe_dimensions(str(out))
+    assert max(width, height) <= 640
+    assert width / height == pytest.approx(160 / 90, rel=0.05)
+
+    duration = converter.probe_duration(str(out))
+    assert duration == pytest.approx(1.0, abs=0.15)
+
+
+def test_create_gif_preview_raises_when_source_missing(tmp_path):
+    missing = tmp_path / "missing.gif"
+    out = tmp_path / "preview.mp4"
+
+    with pytest.raises(FileNotFoundError):
+        converter.create_gif_preview(str(missing), str(out))
+
+
+def test_create_gif_preview_builds_expected_ffmpeg_command(monkeypatch, tmp_path):
+    source = tmp_path / "source.gif"
+    source.write_bytes(b"GIF89a")
+    out = tmp_path / "nested" / "preview.mp4"
+
+    calls = []
+
+    class DummyCompletedProcess:
+        stdout = ""
+
+    def fake_run(cmd, capture_output, text, encoding, errors, check):
+        calls.append({
+            "cmd": cmd,
+            "capture_output": capture_output,
+            "text": text,
+            "encoding": encoding,
+            "errors": errors,
+            "check": check,
+        })
+        temp_out = Path(cmd[-1])
+        temp_out.parent.mkdir(parents=True, exist_ok=True)
+        temp_out.write_bytes(b"mp4")
+        return DummyCompletedProcess()
+
+    monkeypatch.setattr(converter, "find_ffmpeg", lambda: "ffmpeg-bin")
+    monkeypatch.setattr(converter.subprocess, "run", fake_run)
+
+    result = converter.create_gif_preview(str(source), str(out))
+
+    assert result == str(out)
+    assert out.exists()
+    assert out.parent.exists()
+    assert len(calls) == 1
+    recorded = calls[0]
+    assert recorded == {
+        "cmd": ANY,
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "check": True,
+    }
+
+    cmd = recorded["cmd"]
+    assert cmd[:4] == ["ffmpeg-bin", "-y", "-i", str(source)]
+    assert "-an" in cmd
+    assert "-vf" in cmd
+    vf = cmd[cmd.index("-vf") + 1]
+    assert "fps=12" in vf
+    assert "scale=" in vf
+    assert "format=yuv420p" in vf
+    assert "flags=lanczos" in vf
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert cmd[cmd.index("-preset") + 1] == "veryfast"
+    assert cmd[cmd.index("-crf") + 1] == "26"
+    assert cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"
+    assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+    assert Path(cmd[-1]).suffix == ".mp4"
+    assert Path(cmd[-1]).parent == out.parent
+    assert Path(cmd[-1]) != out
+
+
+def test_create_gif_preview_cleans_partial_file_when_ffmpeg_fails(monkeypatch, tmp_path):
+    source = tmp_path / "source.gif"
+    source.write_bytes(b"GIF89a")
+    out = tmp_path / "preview.mp4"
+
+    def fake_run(cmd, capture_output, text, encoding, errors, check):
+        temp_out = Path(cmd[-1])
+        temp_out.parent.mkdir(parents=True, exist_ok=True)
+        temp_out.write_bytes(b"partial-mp4-bytes")
+        raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
+
+    monkeypatch.setattr(converter.subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        converter.create_gif_preview(str(source), str(out))
+
+    assert not out.exists()
+    assert list(tmp_path.glob("*.mp4")) == []
+
+
+def test_create_gif_preview_keeps_existing_output_when_ffmpeg_fails(monkeypatch, tmp_path):
+    source = tmp_path / "source.gif"
+    source.write_bytes(b"GIF89a")
+    out = tmp_path / "preview.mp4"
+    out.write_bytes(b"old-preview")
+
+    def fake_run(cmd, capture_output, text, encoding, errors, check):
+        temp_out = Path(cmd[-1])
+        temp_out.parent.mkdir(parents=True, exist_ok=True)
+        temp_out.write_bytes(b"partial-mp4-bytes")
+        raise subprocess.CalledProcessError(returncode=1, cmd=cmd)
+
+    monkeypatch.setattr(converter.subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        converter.create_gif_preview(str(source), str(out))
+
+    assert out.read_bytes() == b"old-preview"
+    assert list(tmp_path.glob("*.tmp-*.mp4")) == []

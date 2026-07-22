@@ -7,7 +7,7 @@
 把视频拖入窗口，可视化选取一段，转成循环播放、尽量清晰、体积达标的 GIF。
 主用途 QQ 表情（≤5MB），同时支持微信表情（≤1MB / ≤300px）。
 
-支持的导入格式：mp4 / mov / mkv / avi / webm / flv，以及 **GIF**。导入 GIF 时同样在窗口内显示画面，可像视频一样选段、裁切、再压缩成达标的表情包（GIF 预览循环播放整段、不支持逐帧 seek，但选段与裁切均按所选区间精确生效）。
+支持的导入格式：mp4 / mov / mkv / avi / webm / flv，以及 **GIF**。导入 GIF 时会先生成一次轻量视频预览；调整起止时间时，预览窗口会实时循环播放当前所选片段；裁切和最终转换仍直接使用原始 GIF，并按所选时间区间精确生效。
 
 > 📦 直接下载使用：前往 [Releases](https://github.com/Scott-Wan/memegif/releases) 下载 `MemeGIF-vX.X.X-win64.zip`，解压后双击 `MemeGIF.exe` 即可（已内置 ffmpeg，无需安装任何依赖）。
 

@@ -4,11 +4,14 @@
 这样 <video> 既能正确加载含中文/特殊字符路径的视频，又能拖动 seek 跳帧。
 """
 import base64
+import hashlib
 import json
 import os
+import tempfile
 import threading
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 import webview
 from webview.dom import DOMEventHandler
@@ -116,9 +119,32 @@ def _start_video_server():
 class Api:
     """前端通过 pywebview.api.<方法> 调用。所有方法返回可 JSON 序列化的 dict。"""
 
-    def __init__(self, video_port):
+    def __init__(self, video_port, preview_root=None):
         self._window = None
         self._video_port = video_port
+        self._preview_tmpdir = None
+        if preview_root is None:
+            self._preview_tmpdir = tempfile.TemporaryDirectory(prefix="memegif-preview-")
+            self._preview_root = Path(self._preview_tmpdir.name)
+        else:
+            self._preview_root = Path(preview_root)
+            self._preview_root.mkdir(parents=True, exist_ok=True)
+        self._preview_cache = {}
+        self._preview_lock = threading.Lock()
+
+    def _preview_key(self, path):
+        full_path = os.path.abspath(path)
+        stat = os.stat(full_path)
+        return (os.path.normcase(full_path), stat.st_size, stat.st_mtime_ns)
+
+    def cleanup(self, *_):
+        """清理自有预览目录；重复调用安全。"""
+        with self._preview_lock:
+            self._preview_cache.clear()
+            tmpdir = self._preview_tmpdir
+            self._preview_tmpdir = None
+        if tmpdir:
+            tmpdir.cleanup()
 
     def set_window(self, window):
         self._window = window
@@ -135,15 +161,23 @@ class Api:
         return self.load_video(path)
 
     def load_video(self, path):
-        """探测时长与帧率，返回 {path, duration, fps, kind} 或 {error}。
+        """探测时长、帧率与源尺寸，返回 {path, duration, fps, width, height, kind} 或 {error}。
 
         kind 为 'gif'（动图，前端用 <img> 预览）或 'video'（用 <video> 预览）。
         """
         try:
             duration = converter.probe_duration(path)
             fps = converter.probe_fps(path)
+            width, height = converter.probe_dimensions(path)
             kind = "gif" if os.path.splitext(path)[1].lower() == ".gif" else "video"
-            return {"path": path, "duration": duration, "fps": fps, "kind": kind}
+            return {
+                "path": path,
+                "duration": duration,
+                "fps": fps,
+                "width": width,
+                "height": height,
+                "kind": kind,
+            }
         except Exception as e:
             return {"error": f"无法读取文件：{e}"}
 
@@ -166,6 +200,36 @@ class Api:
             return {"url": f"data:image/gif;base64,{b64}"}
         except Exception as e:
             return {"error": f"无法读取 GIF：{e}"}
+
+    def prepare_gif_preview(self, path):
+        """为 GIF 生成同源 MP4 预览，返回 {url} 或 {error}。"""
+        if os.path.splitext(path)[1].lower() != ".gif":
+            return {"error": "只能为 GIF 生成片段预览"}
+        if not os.path.isfile(path):
+            return {"error": "GIF 文件不存在"}
+
+        try:
+            key = self._preview_key(path)
+        except Exception as e:
+            return {"error": f"无法生成 GIF 片段预览：{e}"}
+
+        try:
+            with self._preview_lock:
+                cached = self._preview_cache.get(key)
+                if cached is not None and Path(cached["path"]).is_file():
+                    return {"url": cached["url"]}
+
+                digest = hashlib.sha256(repr(key).encode("utf-8")).hexdigest()[:20]
+                preview_path = str(self._preview_root / f"{digest}.mp4")
+                result_path = converter.create_gif_preview(path, preview_path)
+                result = {
+                    "path": result_path,
+                    "url": self.video_src(result_path)["url"],
+                }
+                self._preview_cache[key] = result
+                return {"url": result["url"]}
+        except Exception as e:
+            return {"error": f"无法生成 GIF 片段预览：{e}"}
 
     def convert(self, path, start, end, preset_key, crop=None):
         """执行转换，返回 {out_path, size_mb, max_edge, fps, within_limit} 或 {error}。
@@ -251,6 +315,7 @@ def main():
         except Exception as ex:
             _push_js(window, "setStatus(" + json.dumps("拖放注册失败：" + str(ex)) + ",'err')")
 
+    window.events.closed += api.cleanup
     window.events.loaded += _register_dnd
     webview.start()
 

@@ -137,17 +137,31 @@ def probe_fps(video_path: str) -> float:
     return _parse_fps(s.get("r_frame_rate", ""), s.get("avg_frame_rate", ""))
 
 
-def gif_dimensions(gif_path: str) -> tuple:
-    """返回 GIF 的 (宽, 高) 像素。"""
+def probe_dimensions(video_path: str) -> tuple[int, int]:
+    """返回首个视频流的 (宽, 高) 像素，读不到时报错。"""
     cmd = [
         _ffprobe(), "-v", "error",
         "-select_streams", "v:0",
         "-show_entries", "stream=width,height",
-        "-of", "json", gif_path,
+        "-of", "json", video_path,
     ]
     out = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
-    s = json.loads(out.stdout)["streams"][0]
-    return int(s["width"]), int(s["height"])
+    streams = json.loads(out.stdout).get("streams") or []
+    if streams:
+        s = streams[0]
+        try:
+            width = int(s["width"])
+            height = int(s["height"])
+        except (KeyError, TypeError, ValueError):
+            width = height = 0
+        if width > 0 and height > 0:
+            return width, height
+    raise ValueError("无法确定画面尺寸")
+
+
+def gif_dimensions(gif_path: str) -> tuple[int, int]:
+    """返回 GIF 的 (宽, 高) 像素。"""
+    return probe_dimensions(gif_path)
 
 
 def _build_vf(crop, fps, max_edge) -> str:
@@ -169,6 +183,60 @@ def _build_vf(crop, fps, max_edge) -> str:
     parts.append(f"fps={fps}")
     parts.append(scale)
     return ",".join(parts)
+
+
+def create_gif_preview(gif_path: str, out_path: str) -> str:
+    """把 GIF 转成 H.264 MP4 预览，限制最长边不超过 640，返回输出路径。"""
+    source = Path(gif_path)
+    if not source.exists():
+        raise FileNotFoundError(f"源 GIF 不存在: {gif_path}")
+
+    target = Path(out_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_target = target.with_name(f"{target.stem}.tmp-{os.getpid()}.mp4")
+
+    ff = find_ffmpeg()
+    vf = (
+        "fps=12,"
+        "scale='if(gte(iw,ih),if(gt(iw,640),640,iw),-2)':"
+        "'if(gte(ih,iw),if(gt(ih,640),640,ih),-2)':flags=lanczos,"
+        "format=yuv420p"
+    )
+    cmd = [
+        ff,
+        "-y",
+        "-i",
+        str(source),
+        "-an",
+        "-vf",
+        vf,
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "26",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(temp_target),
+    ]
+    try:
+        subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
+        )
+        if not temp_target.exists() or temp_target.stat().st_size <= 0:
+            raise RuntimeError("GIF 预览 MP4 生成失败")
+        os.replace(temp_target, target)
+    finally:
+        temp_target.unlink(missing_ok=True)
+    return str(target)
 
 
 def convert_once(video_path: str, start: float, end: float,

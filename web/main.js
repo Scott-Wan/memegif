@@ -1,6 +1,18 @@
 // 前端交互：导入视频、可视化选段（滑块 + 数字框双向联动）、画面裁切、调用后端转换。
 
-let state = { path: null, duration: 0, fps: 25, startSec: 0, endSec: 0, cropOn: false, kind: "video" };
+let state = {
+  path: null,
+  duration: 0,
+  fps: 25,
+  startSec: 0,
+  endSec: 0,
+  cropOn: false,
+  kind: "video",
+  sourceWidth: 0,
+  sourceHeight: 0,
+  previewMode: "video",
+  loadRequestId: 0,
+};
 
 const $ = (id) => document.getElementById(id);
 const dropzone = $("dropzone");
@@ -17,22 +29,89 @@ const cropBox = $("crop-box");
 // 裁切框（显示像素，相对 overlay 左上角）
 let cropRect = null;
 
-// ---- 预览媒体抽象：视频用 <video>，GIF 用 <img>，裁切/布局统一走这里 ----
+// ---- 预览媒体抽象：video preview 用 <video>，gif-image preview 用 <img> ----
 function mediaEl() {
-  return state.kind === "gif" ? gifImg : video;
+  return state.previewMode === "gif-image" ? gifImg : video;
 }
 
-// 媒体真实像素尺寸（<video> 用 videoWidth，<img> 用 naturalWidth）
-function mediaSize() {
-  return state.kind === "gif"
-    ? { w: gifImg.naturalWidth, h: gifImg.naturalHeight }
-    : { w: video.videoWidth, h: video.videoHeight };
+// 源媒体像素尺寸优先用后端探测结果，避免 GIF 预览切到 MP4 后拿不到原始宽高。
+function sourceMediaSize() {
+  if (state.sourceWidth > 0 && state.sourceHeight > 0) {
+    return { w: state.sourceWidth, h: state.sourceHeight };
+  }
+  if (state.previewMode === "gif-image") {
+    return { w: gifImg.naturalWidth, h: gifImg.naturalHeight };
+  }
+  return { w: video.videoWidth, h: video.videoHeight };
 }
 
-// 跳到指定秒：仅 <video> 支持，GIF 无法 seek（循环播放整段，转换仍按选段裁剪）
+function isCurrentRequest(requestId, path) {
+  return window.RangePreview.isCurrentPreviewRequest(
+    requestId,
+    state.loadRequestId,
+    path,
+    state.path
+  );
+}
+
+function clearVideoPreview() {
+  try { video.pause(); } catch (e) {}
+  video.removeAttribute("src");
+  video.load();
+}
+
+function clearGifPreview() {
+  gifImg.removeAttribute("src");
+}
+
+function showVideoPreview() {
+  gifImg.classList.add("hidden");
+  video.classList.remove("hidden");
+  state.previewMode = "video";
+}
+
+function showGifImagePreview() {
+  video.classList.add("hidden");
+  gifImg.classList.remove("hidden");
+  state.previewMode = "gif-image";
+}
+
+// 跳到指定秒：仅视频预览支持 seek。
 function seekTo(sec) {
-  if (state.kind === "gif") return;
+  if (state.previewMode !== "video") return;
   try { video.currentTime = sec; } catch (e) {}
+}
+
+function playVideo() {
+  if (state.previewMode !== "video") return;
+  try {
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {});
+    }
+  } catch (e) {}
+}
+
+function restartSelectedPreview(seekToEnd) {
+  if (state.previewMode !== "video") return;
+  const target = state.kind === "gif" ? state.startSec : (seekToEnd ? state.endSec : state.startSec);
+  seekTo(target);
+  playVideo();
+}
+
+function applyGifRangeLoop() {
+  if (state.kind !== "gif" || state.previewMode !== "video") return;
+  const action = window.RangePreview.playbackAction(video.currentTime, state.startSec, state.endSec);
+  if (action.pause) {
+    try { video.pause(); } catch (e) {}
+  }
+  if (action.seekTo != null) {
+    seekTo(action.seekTo);
+  }
+  if (action.pause) return;
+  if (action.seekTo != null) {
+    playVideo();
+  }
 }
 
 function whenReady(fn) {
@@ -104,65 +183,120 @@ function syncUI() {
   $("dur-label").textContent = "时长 " + (state.endSec - state.startSec).toFixed(1) + "s";
 }
 
+async function fallbackToGifImage(path, requestId, reason) {
+  setStatus(reason + "，正在回退到 GIF 图片预览…", "busy");
+  clearVideoPreview();
+  const gifRes = await window.pywebview.api.gif_data_url(path);
+  if (!isCurrentRequest(requestId, path)) return false;
+  if (gifRes.error) {
+    setStatus(reason + "，且 GIF 图片预览也失败：" + gifRes.error + "。仍可直接选段后转换", "err");
+    return false;
+  }
+  showGifImagePreview();
+  gifImg.addEventListener("error", () => {
+    if (!isCurrentRequest(requestId, path)) return;
+    setStatus(reason + "，且 GIF 图片预览加载失败。仍可直接选段后转换", "err");
+  }, { once: true });
+  gifImg.src = gifRes.url;
+  setStatus(reason + "，已回退到 GIF 图片预览（不支持区间内循环 seek）", "err");
+  return true;
+}
+
 async function onVideoLoaded(info) {
   if (info.error) { setStatus(info.error, "err"); return; }
   if (info.cancelled) return;
+
+  const requestId = state.loadRequestId + 1;
+  state.loadRequestId = requestId;
   state.path = info.path;
   state.duration = info.duration;
   state.fps = info.fps || 25;
+  state.sourceWidth = info.width || 0;
+  state.sourceHeight = info.height || 0;
   state.kind = info.kind === "gif" ? "gif" : "video";
+  state.previewMode = "video";
 
-  if (state.kind === "gif") {
-    // GIF：用 <img> 显示动画，隐藏 <video>
-    // 走 base64 data: URL 内联，绕开 WebView2 下 <img> 加载本地 HTTP 服务
-    // 的跨源 / 206 Range 兼容问题（之前预览框空白的根因）。
-    video.removeAttribute("src");
-    video.load();
-    video.classList.add("hidden");
-    gifImg.classList.remove("hidden");
-    const gifRes = await window.pywebview.api.gif_data_url(info.path);
-    if (gifRes.error) {
-      setStatus(gifRes.error + "，但仍可直接选段后转换", "err");
-    } else {
-      gifImg.addEventListener("error", () => {
-        setStatus("GIF 预览加载失败，但仍可直接选段后转换", "err");
-      }, { once: true });
-      gifImg.src = gifRes.url;
-    }
-  } else {
-    // 视频：用 <video>，隐藏 GIF 图
-    const srcRes = await window.pywebview.api.video_src(info.path);
-    gifImg.classList.add("hidden");
-    gifImg.removeAttribute("src");
-    video.classList.remove("hidden");
-    video.src = srcRes.url;
-    video.load();
-    video.addEventListener("loadeddata", () => {
-      try { video.currentTime = 0.04; } catch (e) {}
-    }, { once: true });
-    video.addEventListener("error", () => {
-      setStatus("视频预览加载失败，但仍可直接选段后转换", "err");
-    }, { once: true });
-  }
-
-  disableCrop();                 // 新文件默认不裁切
+  disableCrop();
   editor.classList.toggle("has-hours", showHours());
-  setRange(0, state.duration);   // 默认全选
-
+  setRange(0, state.duration);
   dropzone.classList.add("hidden");
   editor.classList.remove("hidden");
+
+  clearVideoPreview();
+  clearGifPreview();
+
   const hint = (!info.fps) ? "（未能探测帧率，按 25fps 估算）" : "";
-  setStatus("拖动滑块或输入时间选段，可点「裁切」框选画面" + hint, null);
+
+  if (state.kind === "gif") {
+    showVideoPreview();
+    setStatus("正在准备 GIF 可拖动预览…" + hint, "busy");
+    const previewRes = await window.pywebview.api.prepare_gif_preview(info.path);
+    if (!isCurrentRequest(requestId, info.path)) return;
+    if (previewRes.error) {
+      await fallbackToGifImage(info.path, requestId, "GIF MP4 预览准备失败：" + previewRes.error);
+      return;
+    }
+    if (!previewRes || !previewRes.url) {
+      await fallbackToGifImage(info.path, requestId, "GIF MP4 预览准备失败：未返回可播放地址");
+      return;
+    }
+    clearVideoPreview();
+    showVideoPreview();
+    video.addEventListener("loadeddata", () => {
+      if (!isCurrentRequest(requestId, info.path)) return;
+      seekTo(state.startSec);
+      playVideo();
+      layoutCropOverlay();
+      setStatus("拖动滑块或输入时间选段，GIF 预览会从起点循环播放" + hint, null);
+    }, { once: true });
+    video.addEventListener("error", async () => {
+      if (!isCurrentRequest(requestId, info.path)) return;
+      await fallbackToGifImage(info.path, requestId, "GIF MP4 预览加载失败");
+    }, { once: true });
+    video.src = previewRes.url;
+    video.load();
+    return;
+  }
+
+  showVideoPreview();
+  setStatus("正在加载视频预览…" + hint, "busy");
+  const srcRes = await window.pywebview.api.video_src(info.path);
+  if (!isCurrentRequest(requestId, info.path)) return;
+  if (srcRes.error) {
+    setStatus("视频预览地址获取失败：" + srcRes.error + "。仍可直接选段后转换", "err");
+    return;
+  }
+  if (!srcRes || !srcRes.url) {
+    setStatus("视频预览地址获取失败：未返回可播放地址。仍可直接选段后转换", "err");
+    return;
+  }
+  clearVideoPreview();
+  showVideoPreview();
+  video.addEventListener("loadeddata", () => {
+    if (!isCurrentRequest(requestId, info.path)) return;
+    try { video.currentTime = 0.04; } catch (e) {}
+    layoutCropOverlay();
+    setStatus("拖动滑块或输入时间选段，可点「裁切」框选画面" + hint, null);
+  }, { once: true });
+  video.addEventListener("error", () => {
+    if (!isCurrentRequest(requestId, info.path)) return;
+    setStatus("视频预览加载失败，但仍可直接选段后转换", "err");
+  }, { once: true });
+  video.src = srcRes.url;
+  video.load();
 }
 
 function resetToDropzone() {
+  state.loadRequestId += 1;
   try { video.pause(); } catch (e) {}
-  video.removeAttribute("src");
-  video.load();
-  gifImg.removeAttribute("src");
+  clearVideoPreview();
+  clearGifPreview();
   state.path = null;
   state.duration = 0;
   state.kind = "video";
+  state.sourceWidth = 0;
+  state.sourceHeight = 0;
+  state.previewMode = "video";
   disableCrop();
   editor.classList.add("hidden");
   dropzone.classList.remove("hidden");
@@ -173,12 +307,12 @@ function resetToDropzone() {
 startRange.addEventListener("input", () => {
   const s = (parseFloat(startRange.value) / 100) * state.duration;
   setRange(s, state.endSec);
-  seekTo(state.startSec);
+  restartSelectedPreview(false);
 });
 endRange.addEventListener("input", () => {
   const e = (parseFloat(endRange.value) / 100) * state.duration;
   setRange(state.startSec, e);
-  seekTo(state.endSec);
+  restartSelectedPreview(true);
 });
 
 // ---- 数字框联动 ----
@@ -187,7 +321,7 @@ function bindTimeGroup(prefix, seekToEnd) {
     const el = $(prefix + suf);
     if (el) el.addEventListener("change", () => {
       setRange(readTime("start"), readTime("end"));
-      seekTo(seekToEnd ? state.endSec : state.startSec);
+      restartSelectedPreview(seekToEnd);
     });
   });
 }
@@ -237,12 +371,12 @@ function disableCrop() {
   overlay.classList.add("hidden");
 }
 
-// 把显示像素裁切框换算成视频真实像素，并取偶数、钳制边界
+// 把显示像素裁切框换算成源媒体真实像素，并取偶数、钳制边界。
 function currentCropPixels() {
   if (!state.cropOn || !cropRect) return null;
   const dispW = overlay.clientWidth, dispH = overlay.clientHeight;
-  const { w: natW, h: natH } = mediaSize();
-  if (!dispW || !dispH || !natW) return null;
+  const { w: natW, h: natH } = sourceMediaSize();
+  if (!dispW || !dispH || !natW || !natH) return null;
   const sx = natW / dispW;
   const sy = natH / dispH;
   const even = (n) => n - (n % 2);
@@ -325,6 +459,8 @@ async function doConvert(presetKey) {
 }
 
 whenReady(() => {
+  video.addEventListener("timeupdate", applyGifRangeLoop);
+
   $("choose-btn").addEventListener("click", async () => {
     setStatus("选择视频文件…", "busy");
     const info = await window.pywebview.api.choose_file();
